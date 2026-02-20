@@ -1,31 +1,19 @@
 """
-main.py
-=======
-Entry point de la aplicación FastAPI SteamSense.
-
-Ciclo de vida:
-  1. Startup: conectar DuckDB, crear tablas, cargar modelo ML
-  2. Serve: FastAPI con todos los routes registrados
-  3. Shutdown: cerrar DuckDB limpiamente
-
-Arranque local:
-  uvicorn main:app --reload --port 8000
-
-Producción (Render.com):
-  uvicorn main:app --host 0.0.0.0 --port $PORT
+main.py — SteamSense API entry point.
 """
 
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from src.db.connection import init_db, close_db
+from src.db.connection import init_db, get_db, close_db
 from src.db.models import create_all_tables
 from src.ml.model import get_model
-from src.routes import games, prices, predict, sync
+from src.routes import games, prices, predict, sync, stats
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,39 +23,34 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-# ── Lifespan ──────────────────────────────────────────────────────────────────
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ──
     logger.info("🚀 Iniciando SteamSense API...")
 
-    con = init_db()
-    create_all_tables(con)
+    init_db()                    # configura la ruta
+    con = get_db()               # abre conexión del thread principal
+    create_all_tables(con)       # crea tablas si no existen
     logger.info("✅ DuckDB listo")
 
-    get_model()  # precarga el modelo (o logea que usará heurística)
+    get_model()
     logger.info("✅ Modelo ML listo")
 
     if not settings.itad_api_key:
-        logger.warning("⚠️  ITAD_API_KEY no configurada. Los endpoints de sync no funcionarán.")
+        logger.warning("⚠️  ITAD_API_KEY no configurada.")
 
-    logger.info(f"✅ SteamSense API lista en modo: {settings.env}")
-
+    logger.info(f"✅ SteamSense API lista — modo: {settings.env}")
     yield
 
-    # ── Shutdown ──
     close_db()
     logger.info("👋 SteamSense API detenida")
 
-
-# ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="SteamSense API",
     description="ML predictor de momentos óptimos de compra en Steam",
     version="2.0.0",
     lifespan=lifespan,
+    default_response_class=ORJSONResponse,  # handles NaN → null automatically
 )
 
 app.add_middleware(
@@ -78,15 +61,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routes ────────────────────────────────────────────────────────────────────
-
 app.include_router(games.router)
 app.include_router(prices.router)
 app.include_router(predict.router)
 app.include_router(sync.router)
+app.include_router(stats.router)
 
-
-# ── Health & root ─────────────────────────────────────────────────────────────
 
 @app.get("/", tags=["health"])
 def root():
@@ -95,20 +75,13 @@ def root():
 
 @app.get("/health", tags=["health"])
 def health():
-    from src.db.connection import get_db
     try:
         get_db().execute("SELECT 1").fetchone()
         db_status = "ok"
     except Exception:
         db_status = "error"
 
-    from src.ml.model import get_model
     model = get_model()
     model_status = "trained" if model._model is not None else "heuristic"
 
-    return {
-        "status": "ok",
-        "db": db_status,
-        "model": model_status,
-        "env": settings.env,
-    }
+    return {"status": "ok", "db": db_status, "model": model_status, "env": settings.env}

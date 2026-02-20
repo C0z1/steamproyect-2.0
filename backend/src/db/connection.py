@@ -1,12 +1,16 @@
 """
 src/db/connection.py
 ====================
-Singleton thread-safe para la conexión DuckDB.
-Un solo archivo .duckdb, una sola conexión.
+Conexión DuckDB thread-safe.
+
+DuckDB no permite compartir una conexión entre threads (FastAPI usa un thread pool
+para endpoints síncronos). Solución: una conexión por thread via threading.local(),
+todas apuntando al mismo archivo .duckdb.
 """
 
 import logging
 import os
+import threading
 from typing import Optional
 
 import duckdb
@@ -16,44 +20,58 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_connection: Optional[duckdb.DuckDBPyConnection] = None
+# Una conexión por thread
+_local = threading.local()
+_db_path: Optional[str] = None
 
 
-def get_db() -> duckdb.DuckDBPyConnection:
-    """Retorna la conexión activa. Lanza RuntimeError si no está inicializada."""
-    if _connection is None:
-        raise RuntimeError("DuckDB no inicializado. Llama a init_db() primero.")
-    return _connection
-
-
-def init_db() -> duckdb.DuckDBPyConnection:
+def init_db() -> None:
     """
-    Inicializa la conexión DuckDB.
-    Crea el directorio y el archivo si no existen.
+    Inicializa la ruta de la DB al arrancar la app.
+    No abre una conexión aquí — cada thread abre la suya al primer get_db().
     """
-    global _connection
+    global _db_path
 
     db_path = settings.duckdb_path
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+    _db_path = db_path
 
-    logger.info(f"Conectando a DuckDB en: {db_path}")
+    logger.info(f"DuckDB configurado en: {db_path}")
 
-    _connection = duckdb.connect(
-        db_path,
+
+def _open_connection() -> duckdb.DuckDBPyConnection:
+    """Abre una nueva conexión al archivo DuckDB."""
+    con = duckdb.connect(
+        _db_path,
         config={
             "memory_limit": settings.duckdb_memory_limit,
             "threads": settings.duckdb_threads,
         }
     )
+    return con
 
-    logger.info("DuckDB conectado correctamente")
-    return _connection
+
+def get_db() -> duckdb.DuckDBPyConnection:
+    """
+    Retorna la conexión DuckDB del thread actual.
+    Si no existe todavía para este thread, la crea.
+    """
+    if _db_path is None:
+        raise RuntimeError("DuckDB no inicializado. Llama a init_db() primero.")
+
+    if not hasattr(_local, "connection") or _local.connection is None:
+        _local.connection = _open_connection()
+        logger.debug(f"Nueva conexión DuckDB para thread {threading.current_thread().name}")
+
+    return _local.connection
 
 
 def close_db():
-    """Cierra la conexión limpiamente."""
-    global _connection
-    if _connection:
-        _connection.close()
-        _connection = None
-        logger.info("DuckDB desconectado")
+    """Cierra la conexión del thread actual (llamado en shutdown)."""
+    if hasattr(_local, "connection") and _local.connection is not None:
+        try:
+            _local.connection.close()
+        except Exception:
+            pass
+        _local.connection = None
+    logger.info("DuckDB desconectado")

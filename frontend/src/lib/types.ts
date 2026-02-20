@@ -1,5 +1,3 @@
-// ── ITAD / Game ───────────────────────────────────────────────────────────────
-
 export interface Game {
   id: string
   slug: string
@@ -17,8 +15,6 @@ export interface SearchResult {
   type?: string
 }
 
-// ── Price History ──────────────────────────────────────────────────────────────
-
 export interface PricePoint {
   timestamp: string
   price_usd: number
@@ -34,8 +30,6 @@ export interface PriceHistoryResponse {
   count: number
   history: PricePoint[]
 }
-
-// ── Stats ─────────────────────────────────────────────────────────────────────
 
 export interface PriceStats {
   total_records: number
@@ -65,10 +59,8 @@ export interface GameStatsResponse {
   seasonal_patterns: SeasonalPattern[]
 }
 
-// ── Prediction ────────────────────────────────────────────────────────────────
-
 export interface Prediction {
-  score: number         // 0–100
+  score: number
   signal: 'BUY' | 'WAIT'
   reason: string
   confidence: number
@@ -90,11 +82,45 @@ export interface PredictionResponse {
   from_cache: boolean
 }
 
-// ── Health ────────────────────────────────────────────────────────────────────
+export interface StoreDeal {
+  shop_id?: number
+  shop_name: string
+  price_usd: number
+  regular_usd: number
+  cut_pct: number
+  url?: string
+}
 
-export interface HealthResponse {
-  status: string
-  db: string
-  model: string
-  env: string
+export interface CurrentPricesResponse {
+  game_id: string
+  deals: StoreDeal[]
+}
+
+export interface TopDeal {
+  id: string
+  title: string
+  appid?: number
+  current_price: number
+  regular_price: number
+  discount_pct: number
+  last_seen: string
+  min_price: number
+}
+
+export interface BuySignal {
+  id: string
+  title: string
+  appid?: number
+  score: number
+  signal: string
+  reason: string
+  current_price: number
+  discount_pct: number
+}
+
+export interface OverviewStats {
+  total_games: number
+  total_records: number
+  buy_signals: number
+  wait_signals: number
 }

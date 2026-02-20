@@ -108,7 +108,15 @@ class ITADClient:
         }
         data = await self._get("/games/history/v2", params)
         if not data:
+            logger.warning(f"history/v2 retornó vacío para game_id={game_id}")
             return []
+
+        # Log estructura real para debug
+        if isinstance(data, list):
+            logger.info(f"history/v2 → lista de {len(data)} entradas. "
+                        f"Primera: {str(data[0])[:200] if data else '(vacía)'}")
+        else:
+            logger.info(f"history/v2 → dict con keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
 
         records = []
         # La API devuelve una lista directa de price events
@@ -161,6 +169,29 @@ class ITADClient:
         }
         data = await self._get("/games/prices/v3", params)
         return data or {}
+    
+    async def get_game_info(self, game_id: str) -> Optional[tuple[str, str, str]]:
+        """
+        Obtiene título y slug de un juego por su ITAD game_id.
+        Usa /games/info/v2. Retorna (game_id, slug, title) o None.
+        """
+        data = await self._get("/games/info/v2", {"id": game_id})
+        if not data:
+            return None
+        try:
+            # La API retorna un objeto con 'title' y 'slug'
+            if isinstance(data, list) and data:
+                item = data[0]
+            elif isinstance(data, dict):
+                item = data
+            else:
+                return None
+            title = item.get("title") or item.get("name") or game_id
+            slug  = item.get("slug") or game_id
+            return (game_id, slug, title)
+        except Exception as e:
+            logger.debug(f"Error en get_game_info({game_id}): {e}")
+            return None
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
@@ -174,3 +205,5 @@ def get_client() -> ITADClient:
     if _client_instance is None:
         _client_instance = ITADClient(settings.itad_api_key)
     return _client_instance
+
+

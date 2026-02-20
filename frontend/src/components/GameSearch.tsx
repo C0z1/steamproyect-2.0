@@ -2,25 +2,25 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Loader2, Gamepad2 } from 'lucide-react'
-import { searchGames } from '@/lib/api'
+import { Search, Loader2, Gamepad2, RefreshCw } from 'lucide-react'
+import { searchGames, syncByGameId } from '@/lib/api'
 import type { SearchResult } from '@/lib/types'
 
 export default function GameSearch() {
-  const [query, setQuery] = useState('')
+  const [query, setQuery]     = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
-  const [error, setError] = useState('')
-  const debounce = useRef<ReturnType<typeof setTimeout>>(null)
-  const router = useRouter()
+  const [syncing, setSyncing] = useState<string | null>(null)  // game_id being synced
+  const [open, setOpen]       = useState(false)
+  const [error, setError]     = useState('')
+  const debounce  = useRef<ReturnType<typeof setTimeout>>(null)
+  const router    = useRouter()
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node))
         setOpen(false)
-      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -33,7 +33,6 @@ export default function GameSearch() {
       setOpen(false)
       return
     }
-
     debounce.current = setTimeout(async () => {
       setLoading(true)
       setError('')
@@ -50,9 +49,18 @@ export default function GameSearch() {
     }, 350)
   }, [query])
 
-  const handleSelect = (game: SearchResult) => {
+  const handleSelect = async (game: SearchResult) => {
     setOpen(false)
     setQuery('')
+    setSyncing(game.id)
+    try {
+      // Sync the game into DuckDB before navigating
+      await syncByGameId(game.id)
+    } catch {
+      // Even if sync fails, try navigating — maybe it's already in DB
+    } finally {
+      setSyncing(null)
+    }
     router.push(`/game/${game.id}`)
   }
 
@@ -79,17 +87,22 @@ export default function GameSearch() {
             focus:outline-none focus:border-steam-cyan focus:ring-1 focus:ring-steam-cyan/30
             transition-all duration-200
           "
-          style={{ fontFamily: 'var(--font-body)' }}
         />
         {query && (
           <button
             onClick={() => { setQuery(''); setResults([]); setOpen(false) }}
             className="absolute right-4 top-1/2 -translate-y-1/2 text-steam-subtle hover:text-steam-text transition-colors"
-          >
-            ✕
-          </button>
+          >✕</button>
         )}
       </div>
+
+      {/* Syncing overlay */}
+      {syncing && (
+        <div className="mt-2 px-4 py-2.5 bg-steam-cyan/10 border border-steam-cyan/20 rounded-lg flex items-center gap-2 text-steam-cyan text-sm">
+          <RefreshCw size={13} className="animate-spin" />
+          Loading price data...
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -99,7 +112,7 @@ export default function GameSearch() {
       )}
 
       {/* Dropdown */}
-      {open && results.length > 0 && (
+      {open && results.length > 0 && !syncing && (
         <div className="
           absolute z-50 w-full mt-2
           bg-steam-card border border-steam-border
@@ -117,7 +130,6 @@ export default function GameSearch() {
                 border-b border-steam-border last:border-0
                 transition-colors text-left group
               "
-              style={{ animationDelay: `${i * 30}ms` }}
             >
               <div className="w-8 h-8 rounded-lg bg-steam-muted flex items-center justify-center flex-shrink-0 group-hover:bg-steam-cyan/10 transition-colors">
                 <Gamepad2 size={14} className="text-steam-subtle group-hover:text-steam-cyan transition-colors" />
@@ -128,9 +140,7 @@ export default function GameSearch() {
                   <div className="text-steam-subtle text-xs capitalize">{game.type}</div>
                 )}
               </div>
-              <div className="text-steam-subtle text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity">
-                →
-              </div>
+              <div className="text-steam-subtle text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity">→</div>
             </button>
           ))}
         </div>

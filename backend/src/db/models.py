@@ -29,16 +29,8 @@ def create_all_tables(con: duckdb.DuckDBPyConnection):
     """)
     # Índice único separado para appid (permite lookup rápido sin bloquear DO UPDATE)
     con.execute("""
-        CREATE TABLE IF NOT EXISTS games (
-            id         VARCHAR PRIMARY KEY,
-            slug       VARCHAR,
-            title      VARCHAR NOT NULL,
-            appid      INTEGER,
-            created_at TIMESTAMP DEFAULT now()
-        )
-    """)
-    con.execute("""
-        CREATE INDEX IF NOT EXISTS idx_games_appid ON games (appid)
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_games_appid
+        ON games (appid)
     """)
 
     # ── price_history ─────────────────────────────────────────────────────────

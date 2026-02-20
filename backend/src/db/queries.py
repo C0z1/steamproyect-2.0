@@ -48,18 +48,23 @@ def get_game_by_appid(con: duckdb.DuckDBPyConnection, appid: int) -> Optional[di
 
 
 def list_games(con: duckdb.DuckDBPyConnection, limit: int = 50, offset: int = 0) -> list[dict]:
+    import math
     rows = con.execute("""
         SELECT g.id, g.title, g.appid, g.slug,
-               COUNT(ph.id)      AS total_records,
-               MIN(ph.price_usd) AS min_price,
-               MAX(ph.cut_pct)   AS max_discount
+               COUNT(ph.id)                    AS total_records,
+               COALESCE(MIN(ph.price_usd), 0)  AS min_price,
+               COALESCE(MAX(ph.cut_pct), 0)    AS max_discount
         FROM games g
         LEFT JOIN price_history ph ON g.id = ph.game_id
         GROUP BY g.id, g.title, g.appid, g.slug
         ORDER BY total_records DESC
         LIMIT ? OFFSET ?
     """, [limit, offset]).fetchdf()
-    return rows.to_dict(orient="records")
+    result = []
+    for r in rows.to_dict(orient="records"):
+        result.append({k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
+                       for k, v in r.items()})
+    return result
 
 
 # ── price_history ─────────────────────────────────────────────────────────────
@@ -137,32 +142,33 @@ def get_price_history(
 
 def get_price_stats(con: duckdb.DuckDBPyConnection, game_id: str) -> Optional[dict]:
     """Estadísticas agregadas de precio para un juego."""
+    import math
     row = con.execute("""
         SELECT
-            COUNT(*)                            AS total_records,
-            MIN(timestamp)::VARCHAR             AS first_seen,
-            MAX(timestamp)::VARCHAR             AS last_seen,
-            MIN(price_usd)                      AS min_price,
-            MAX(price_usd)                      AS max_price,
-            ROUND(AVG(price_usd), 2)            AS avg_price,
-            MAX(cut_pct)                        AS max_discount,
-            ROUND(AVG(cut_pct)
-                FILTER (WHERE cut_pct > 0), 1)  AS avg_discount_when_on_sale,
-
-            -- Descuento promedio por trimestre (detección de patrones)
-            ROUND(AVG(cut_pct)
-                FILTER (WHERE MONTH(timestamp) IN (11,12)), 1) AS avg_cut_q4,
-            ROUND(AVG(cut_pct)
-                FILTER (WHERE MONTH(timestamp) IN (6,7)), 1)   AS avg_cut_summer,
-
-            -- Días desde el mínimo histórico
-            DATEDIFF('day', MIN(timestamp) FILTER (
+            COUNT(*)                                AS total_records,
+            MIN(timestamp)::VARCHAR                 AS first_seen,
+            MAX(timestamp)::VARCHAR                 AS last_seen,
+            COALESCE(MIN(price_usd), 0)             AS min_price,
+            COALESCE(MAX(price_usd), 0)             AS max_price,
+            COALESCE(ROUND(AVG(price_usd), 2), 0)   AS avg_price,
+            COALESCE(MAX(cut_pct), 0)               AS max_discount,
+            COALESCE(ROUND(AVG(cut_pct)
+                FILTER (WHERE cut_pct > 0), 1), 0)  AS avg_discount_when_on_sale,
+            COALESCE(ROUND(AVG(cut_pct)
+                FILTER (WHERE MONTH(timestamp) IN (11,12)), 1), 0) AS avg_cut_q4,
+            COALESCE(ROUND(AVG(cut_pct)
+                FILTER (WHERE MONTH(timestamp) IN (6,7)), 1), 0)   AS avg_cut_summer,
+            COALESCE(DATEDIFF('day', MIN(timestamp) FILTER (
                 WHERE price_usd = (SELECT MIN(price_usd) FROM price_history WHERE game_id = ph.game_id)
-            ), NOW())                           AS days_since_min_price
+            ), NOW()), 0)                            AS days_since_min_price
         FROM price_history ph
         WHERE game_id = ?
     """, [game_id]).fetchdf()
-    return row.iloc[0].to_dict() if not row.empty else None
+    if row.empty:
+        return None
+    # Sanitize any remaining NaN/Inf that pandas may produce for NULL integers
+    return {k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
+            for k, v in row.iloc[0].to_dict().items()}
 
 
 def get_seasonal_patterns(con: duckdb.DuckDBPyConnection, game_id: str) -> list[dict]:
@@ -207,3 +213,93 @@ def upsert_prediction(con: duckdb.DuckDBPyConnection, game_id: str, score: float
             features    = excluded.features,
             computed_at = NOW()
     """, [game_id, score, signal, reason, json.dumps(features)])
+
+
+# ── Overview / Dashboard ───────────────────────────────────────────────────────
+
+def get_overview_stats(con: duckdb.DuckDBPyConnection) -> dict:
+    """Stats globales para el dashboard."""
+    import math
+    row = con.execute("""
+        SELECT
+            (SELECT COUNT(*) FROM games)                        AS total_games,
+            (SELECT COUNT(*) FROM price_history)                AS total_records,
+            (SELECT COUNT(DISTINCT game_id) FROM predictions_cache
+             WHERE signal = 'BUY')                             AS buy_signals,
+            (SELECT COUNT(DISTINCT game_id) FROM predictions_cache
+             WHERE signal = 'WAIT')                            AS wait_signals
+    """).fetchone()
+    return {
+        "total_games":   row[0] or 0,
+        "total_records": row[1] or 0,
+        "buy_signals":   row[2] or 0,
+        "wait_signals":  row[3] or 0,
+    }
+
+
+def get_top_deals(con: duckdb.DuckDBPyConnection, limit: int = 12) -> list[dict]:
+    """
+    Juegos con los mejores descuentos actuales (último registro de precio).
+    """
+    import math
+    rows = con.execute("""
+        WITH latest AS (
+            SELECT DISTINCT ON (game_id)
+                game_id, price_usd, regular_usd, cut_pct, timestamp
+            FROM price_history
+            ORDER BY game_id, timestamp DESC
+        )
+        SELECT
+            g.id, g.title, g.appid, g.slug,
+            l.price_usd   AS current_price,
+            l.regular_usd AS regular_price,
+            l.cut_pct     AS discount_pct,
+            l.timestamp   AS last_seen,
+            ph_min.min_price
+        FROM latest l
+        JOIN games g ON g.id = l.game_id
+        JOIN (
+            SELECT game_id, MIN(price_usd) AS min_price
+            FROM price_history
+            GROUP BY game_id
+        ) ph_min ON ph_min.game_id = l.game_id
+        WHERE l.cut_pct > 0
+        ORDER BY l.cut_pct DESC, l.price_usd ASC
+        LIMIT ?
+    """, [limit]).fetchdf()
+
+    result = []
+    for r in rows.to_dict(orient="records"):
+        result.append({k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
+                       for k, v in r.items()})
+    return result
+
+
+def get_best_predictions(con: duckdb.DuckDBPyConnection, signal: str = "BUY", limit: int = 12) -> list[dict]:
+    """Juegos con mejor score de predicción."""
+    import math
+    rows = con.execute("""
+        WITH latest_price AS (
+            SELECT DISTINCT ON (game_id)
+                game_id, price_usd, cut_pct
+            FROM price_history
+            ORDER BY game_id, timestamp DESC
+        )
+        SELECT
+            g.id, g.title, g.appid,
+            pc.score, pc.signal, pc.reason,
+            COALESCE(lp.price_usd, 0)  AS current_price,
+            COALESCE(lp.cut_pct, 0)    AS discount_pct
+        FROM predictions_cache pc
+        JOIN games g ON g.id = pc.game_id
+        LEFT JOIN latest_price lp ON lp.game_id = pc.game_id
+        WHERE pc.signal = ?
+        ORDER BY pc.score DESC
+        LIMIT ?
+    """, [signal, limit]).fetchdf()
+
+    result = []
+    for r in rows.to_dict(orient="records"):
+        result.append({k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
+                       for k, v in r.items()})
+    return result
