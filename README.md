@@ -1,98 +1,38 @@
 # 🎮 SteamSense
 
-> Predictor ML del momento óptimo para comprar juegos en Steam.
-
-## Stack
-
-| Capa | Tecnología |
-|------|-----------|
-| Backend | FastAPI + Python |
-| Base de datos | DuckDB (archivo local) |
-| Datos | IsThereAnyDeal API |
-| ML | scikit-learn (GradientBoosting) |
-| Frontend | Next.js + React |
-| Deploy | Render.com |
+## Predictor de Machine Learning para el momento óptimo de compra en Steam
 
 ---
 
-## Estructura
+## 🧰 Stack Tecnológico
 
-```
+- **Backend:** FastAPI · Python  
+- **Base de datos:** DuckDB (archivo local)  
+- **Datos:** IsThereAnyDeal API  
+- **Machine Learning:** scikit-learn (Gradient Boosting)  
+- **Frontend:** Next.js + React  
+- **Deploy:** Render.com  
+
+---
+
+## 📁 Estructura del proyecto
+
+```text
 steamsense/
 ├── backend/
 │   ├── src/
-│   │   ├── api/          ← Cliente IsThereAnyDeal
-│   │   ├── db/           ← DuckDB: conexión, modelos, queries
-│   │   ├── ml/           ← Features, modelo, training
-│   │   ├── services/     ← Lógica de negocio
-│   │   └── routes/       ← Endpoints FastAPI
-│   ├── main.py
-│   ├── config.py
-│   └── requirements.txt
-├── frontend/             ← Next.js (por implementar)
-├── data/                 ← DuckDB file (no commitear)
-├── render.yaml
-└── .gitignore
-```
-
----
-
-## Setup local
-
-```bash
-# 1. Clonar y entrar al backend
-cd backend
-
-# 2. Crear entorno virtual
-python -m venv .venv && source .venv/bin/activate
-
-# 3. Instalar dependencias
-pip install -r requirements.txt
-
-# 4. Configurar variables de entorno
-cp .env.example .env
-# Editar .env y agregar ITAD_API_KEY
-
-# 5. Arrancar la API
-uvicorn main:app --reload --port 8000
-```
-
-## Sincronizar datos
-
-```bash
-# Sincronizar top 100 juegos (en background)
-curl -X POST "http://localhost:8000/sync/top?top_n=100"
-
-# Sincronizar un juego específico por Steam appid
-curl -X POST "http://localhost:8000/sync/game/570"   # Dota 2
-```
-
-## Endpoints principales
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/health` | Estado de la app |
-| GET | `/games/search?q=...` | Buscar juegos |
-| GET | `/games/{game_id}` | Info + stats de un juego |
-| GET | `/prices/{game_id}/history` | Historial de precios |
-| GET | `/prices/{game_id}/stats` | Estadísticas de precio |
-| GET | `/predict/{game_id}` | Predicción ML: BUY / WAIT |
-| POST | `/sync/game/{appid}` | Sincronizar un juego |
-| POST | `/sync/top?top_n=N` | Sincronizar top N juegos |
-
-## Entrenar el modelo
-
-```bash
-# Asegúrate de tener datos en DuckDB primero (via /sync/top)
-cd backend
-python -m src.ml.train --db ./data/steamsense.duckdb
-```
-
----
-
-## Deploy en Render.com
-
-1. Conectar el repositorio en Render
-2. El `render.yaml` configura automáticamente backend + frontend + Persistent Disk
-3. Agregar `ITAD_API_KEY` manualmente en el dashboard de Render (Environment)
-4. Deploy 🚀
+│   │   ├── api/              # Cliente IsThereAnyDeal
+│   │   ├── db/               # DuckDB: conexión, modelos, queries
+│   │   ├── ml/               # Features, modelo, entrenamiento
+│   │   ├── services/         # Lógica de negocio
+│   │   ├── routes/           # Endpoints FastAPI
+│   │   ├── main.py
+│   │   └── config.py
+│   ├── data/
+│   │   └── steamsense.duckdb # Base de datos local
+│   ├── requirements.txt
+│   └── render.yaml
+│
+├── frontend/                 # Next.js (por implementar)
+├── .gitignore
+└── README.md
