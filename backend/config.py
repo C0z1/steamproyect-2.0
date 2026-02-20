@@ -10,6 +10,10 @@ from functools import lru_cache
 
 
 class Settings:
+    # ── Steam Web API ───────────────────────────────────────────
+    steam_api_key: str = os.getenv("STEAM_API_KEY", "")
+    jwt_secret: str = os.getenv("JWT_SECRET", "steamsense-dev-secret-change-in-prod")
+
     # ── IsThereAnyDeal ──────────────────────────────────────────
     itad_api_key: str = os.getenv("ITAD_API_KEY", "")
     itad_base_url: str = os.getenv("ITAD_BASE_URL", "https://api.isthereanydeal.com")
@@ -51,6 +55,8 @@ class Settings:
                         key, _, val = line.partition("=")
                         os.environ.setdefault(key.strip(), val.strip())
         # Re-read after .env loaded
+        self.steam_api_key = os.getenv("STEAM_API_KEY", "")
+        self.jwt_secret = os.getenv("JWT_SECRET", "steamsense-dev-secret-change-in-prod")
         self.itad_api_key = os.getenv("ITAD_API_KEY", "")
         self.itad_base_url = os.getenv("ITAD_BASE_URL", "https://api.isthereanydeal.com")
         self.itad_country = os.getenv("ITAD_COUNTRY", "US")

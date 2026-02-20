@@ -240,29 +240,34 @@ def get_overview_stats(con: duckdb.DuckDBPyConnection) -> dict:
 def get_top_deals(con: duckdb.DuckDBPyConnection, limit: int = 12) -> list[dict]:
     """
     Juegos con los mejores descuentos actuales (último registro de precio).
+    DuckDB no tiene DISTINCT ON — usamos ROW_NUMBER() OVER.
     """
     import math
     rows = con.execute("""
-        WITH latest AS (
-            SELECT DISTINCT ON (game_id)
-                game_id, price_usd, regular_usd, cut_pct, timestamp
+        WITH ranked AS (
+            SELECT
+                game_id, price_usd, regular_usd, cut_pct, timestamp,
+                ROW_NUMBER() OVER (PARTITION BY game_id ORDER BY timestamp DESC) AS rn
             FROM price_history
-            ORDER BY game_id, timestamp DESC
+        ),
+        latest AS (
+            SELECT game_id, price_usd, regular_usd, cut_pct, timestamp
+            FROM ranked WHERE rn = 1
+        ),
+        mins AS (
+            SELECT game_id, MIN(price_usd) AS min_price
+            FROM price_history GROUP BY game_id
         )
         SELECT
             g.id, g.title, g.appid, g.slug,
             l.price_usd   AS current_price,
             l.regular_usd AS regular_price,
             l.cut_pct     AS discount_pct,
-            l.timestamp   AS last_seen,
-            ph_min.min_price
+            l.timestamp::VARCHAR AS last_seen,
+            COALESCE(m.min_price, l.price_usd) AS min_price
         FROM latest l
         JOIN games g ON g.id = l.game_id
-        JOIN (
-            SELECT game_id, MIN(price_usd) AS min_price
-            FROM price_history
-            GROUP BY game_id
-        ) ph_min ON ph_min.game_id = l.game_id
+        JOIN mins m ON m.game_id = l.game_id
         WHERE l.cut_pct > 0
         ORDER BY l.cut_pct DESC, l.price_usd ASC
         LIMIT ?
@@ -279,11 +284,14 @@ def get_best_predictions(con: duckdb.DuckDBPyConnection, signal: str = "BUY", li
     """Juegos con mejor score de predicción."""
     import math
     rows = con.execute("""
-        WITH latest_price AS (
-            SELECT DISTINCT ON (game_id)
-                game_id, price_usd, cut_pct
+        WITH ranked_price AS (
+            SELECT
+                game_id, price_usd, cut_pct,
+                ROW_NUMBER() OVER (PARTITION BY game_id ORDER BY timestamp DESC) AS rn
             FROM price_history
-            ORDER BY game_id, timestamp DESC
+        ),
+        latest_price AS (
+            SELECT game_id, price_usd, cut_pct FROM ranked_price WHERE rn = 1
         )
         SELECT
             g.id, g.title, g.appid,

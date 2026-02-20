@@ -27,10 +27,9 @@ def create_all_tables(con: duckdb.DuckDBPyConnection):
             created_at TIMESTAMP DEFAULT now()
         )
     """)
-    # Índice único separado para appid (permite lookup rápido sin bloquear DO UPDATE)
+    # Índice regular para appid — DuckDB no soporta partial indexes
     con.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_games_appid
-        ON games (appid)
+        CREATE INDEX IF NOT EXISTS idx_games_appid ON games (appid)
     """)
 
     # ── price_history ─────────────────────────────────────────────────────────
@@ -64,3 +63,44 @@ def create_all_tables(con: duckdb.DuckDBPyConnection):
     """)
 
     logger.info("Tablas DuckDB verificadas/creadas: games, price_history, predictions_cache")
+
+
+def create_user_tables(con):
+    """Tablas para usuarios autenticados con Steam."""
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            steam_id      VARCHAR PRIMARY KEY,
+            display_name  VARCHAR,
+            avatar_url    VARCHAR,
+            profile_url   VARCHAR,
+            last_login    TIMESTAMP DEFAULT now(),
+            created_at    TIMESTAMP DEFAULT now()
+        )
+    """)
+
+    # Juegos que el usuario ya posee en Steam
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS user_games (
+            steam_id      VARCHAR NOT NULL,
+            appid         INTEGER NOT NULL,
+            game_title    VARCHAR,
+            playtime_mins INTEGER DEFAULT 0,
+            last_played   TIMESTAMP,
+            synced_at     TIMESTAMP DEFAULT now(),
+            PRIMARY KEY (steam_id, appid)
+        )
+    """)
+
+    # Wishlist del usuario
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS user_wishlist (
+            steam_id    VARCHAR NOT NULL,
+            appid       INTEGER NOT NULL,
+            game_title  VARCHAR,
+            added_at    TIMESTAMP DEFAULT now(),
+            PRIMARY KEY (steam_id, appid)
+        )
+    """)
+
+    logger.info("Tablas de usuario verificadas/creadas")

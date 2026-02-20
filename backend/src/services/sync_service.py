@@ -58,7 +58,7 @@ async def sync_by_game_id(game_id: str) -> dict:
 
     async with ITADClient(settings.itad_api_key) as client:
         # 1. Obtener título real del juego
-        info = await client.get_game_info(game_id=game_id)
+        info = await client.get_game_info(game_id)
         if info:
             _, slug, title = info
         else:

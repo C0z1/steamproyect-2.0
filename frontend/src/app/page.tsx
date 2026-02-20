@@ -1,17 +1,16 @@
 import { Suspense } from 'react'
-import { TrendingUp, Database, Brain, Zap, Clock, ArrowRight } from 'lucide-react'
+import { TrendingUp, Database, Zap, Clock, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import GameSearch from '@/components/GameSearch'
 import GameCard from '@/components/GameCard'
 import { getTopDeals, getTopBuySignals, getOverviewStats } from '@/lib/api'
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+import type { TopDeal, BuySignal } from '@/lib/types'
 
 function CardSkeleton() {
   return (
     <div className="glass rounded-2xl overflow-hidden animate-pulse">
-      <div className="h-32 bg-steam-muted shimmer" />
+      <div className="h-32 bg-steam-muted" />
       <div className="p-4 space-y-2">
         <div className="h-4 bg-steam-muted rounded w-3/4" />
         <div className="h-3 bg-steam-muted rounded w-1/2" />
@@ -29,26 +28,27 @@ function GridSkeleton() {
   )
 }
 
-// ── Data sections ─────────────────────────────────────────────────────────────
-
 async function OverviewBar() {
   let stats = { total_games: 0, total_records: 0, buy_signals: 0, wait_signals: 0 }
   try { stats = await getOverviewStats() } catch {}
+
+  const fmt = (n: number) => n > 0 ? n.toLocaleString() : '—'
+
   return (
-    <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 py-6">
+    <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14 py-6">
       {[
-        { label: 'Games tracked', value: stats.total_games.toLocaleString(), icon: Database },
-        { label: 'Price records', value: stats.total_records.toLocaleString(), icon: TrendingUp },
-        { label: 'BUY signals', value: stats.buy_signals.toString(), icon: Zap, green: true },
-        { label: 'WAIT signals', value: stats.wait_signals.toString(), icon: Clock },
-      ].map(({ label, value, icon: Icon, green }) => (
+        { label: 'Games tracked',  value: fmt(stats.total_games),   icon: Database, color: '' },
+        { label: 'Price records',  value: fmt(stats.total_records),  icon: TrendingUp, color: '' },
+        { label: 'BUY signals',   value: fmt(stats.buy_signals),    icon: Zap,  color: 'text-steam-green' },
+        { label: 'WAIT signals',  value: fmt(stats.wait_signals),   icon: Clock, color: '' },
+      ].map(({ label, value, icon: Icon, color }) => (
         <div key={label} className="text-center">
-          <div className="flex items-center justify-center gap-1.5 text-steam-subtle text-xs font-mono mb-0.5">
-            <Icon size={11} className={green ? 'text-steam-green' : ''} />
+          <div className="flex items-center justify-center gap-1.5 text-steam-subtle text-xs font-mono mb-1">
+            <Icon size={11} className={color} />
             {label}
           </div>
-          <div className={`font-display font-bold text-lg ${green ? 'text-steam-green' : 'text-steam-text'}`}>
-            {value || '—'}
+          <div className={`font-display font-bold text-xl ${color || 'text-steam-text'}`}>
+            {value}
           </div>
         </div>
       ))}
@@ -57,13 +57,15 @@ async function OverviewBar() {
 }
 
 async function TopDealsSection() {
-  let deals: any[] = []
+  let deals: TopDeal[] = []
   try { deals = await getTopDeals(8) } catch {}
 
   if (!deals.length) return (
-    <div className="text-center py-10 text-steam-subtle text-sm">
-      No deals data yet — run a sync first.
-      <code className="block mt-1 text-xs text-steam-cyan/60">POST /sync/top?top_n=50</code>
+    <div className="text-center py-10 space-y-3">
+      <p className="text-steam-subtle text-sm">No deals yet — run a sync to populate data.</p>
+      <code className="block text-xs text-steam-cyan/60 font-mono">
+        curl -X POST http://localhost:8000/sync/top?top_n=50
+      </code>
     </div>
   )
 
@@ -71,8 +73,7 @@ async function TopDealsSection() {
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {deals.map((d, i) => (
         <GameCard
-          key={d.id}
-          id={d.id} title={d.title} appid={d.appid}
+          key={d.id} id={d.id} title={d.title} appid={d.appid}
           currentPrice={d.current_price} regularPrice={d.regular_price}
           discountPct={d.discount_pct} minPrice={d.min_price}
           lastSeen={d.last_seen} index={i}
@@ -83,12 +84,12 @@ async function TopDealsSection() {
 }
 
 async function BuySignalsSection() {
-  let signals: any[] = []
+  let signals: BuySignal[] = []
   try { signals = await getTopBuySignals(8) } catch {}
 
   if (!signals.length) return (
-    <div className="text-center py-10 text-steam-subtle text-sm">
-      No predictions yet — predictions are generated when you view a game.
+    <div className="text-center py-10">
+      <p className="text-steam-subtle text-sm">No predictions yet — browse a game to generate one.</p>
     </div>
   )
 
@@ -96,18 +97,14 @@ async function BuySignalsSection() {
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {signals.map((s, i) => (
         <GameCard
-          key={s.id}
-          id={s.id} title={s.title} appid={s.appid}
+          key={s.id} id={s.id} title={s.title} appid={s.appid}
           currentPrice={s.current_price} discountPct={s.discount_pct}
-          score={s.score} signal={s.signal} reason={s.reason}
-          index={i}
+          score={s.score} signal={s.signal} index={i}
         />
       ))}
     </div>
   )
 }
-
-// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
   return (
@@ -121,37 +118,32 @@ export default function HomePage() {
 
         <div className="relative max-w-3xl mx-auto text-center space-y-7">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-steam-cyan/10 border border-steam-cyan/20 rounded-full text-steam-cyan text-xs font-mono">
-            <Brain size={11} /> ML-powered · updated live
+            <Zap size={11} /> ML-powered · updated live
           </div>
-
           <div className="space-y-3">
             <h1 className="font-display font-bold text-5xl sm:text-6xl leading-none tracking-tight">
-              <span className="text-steam-text">Buy or</span>
-              <br />
+              <span className="text-steam-text">Buy or</span><br />
               <span className="text-gradient-cyan">Wait?</span>
             </h1>
             <p className="text-steam-subtle text-lg max-w-lg mx-auto leading-relaxed">
               Machine learning analyzes years of Steam price history to tell you exactly when to buy.
             </p>
           </div>
-
           <GameSearch />
         </div>
       </div>
 
-      {/* Overview stats bar */}
+      {/* Stats bar */}
       <div className="max-w-4xl mx-auto px-6">
         <div className="glass rounded-2xl">
-          <Suspense fallback={<div className="h-20 animate-pulse" />}>
+          <Suspense fallback={<div className="h-24 animate-pulse rounded-2xl bg-steam-muted" />}>
             <OverviewBar />
           </Suspense>
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Content */}
       <div className="max-w-6xl mx-auto px-6 py-12 space-y-14">
-
-        {/* Hot Deals */}
         <section>
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -167,7 +159,6 @@ export default function HomePage() {
           </Suspense>
         </section>
 
-        {/* ML Buy Signals */}
         <section>
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -184,7 +175,6 @@ export default function HomePage() {
             <BuySignalsSection />
           </Suspense>
         </section>
-
       </div>
     </div>
   )

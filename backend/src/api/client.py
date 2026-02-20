@@ -108,42 +108,73 @@ class ITADClient:
         }
         data = await self._get("/games/history/v2", params)
         if not data:
-            logger.warning(f"history/v2 retornó vacío para game_id={game_id}")
+            logger.warning(f"history/v2 vacío para game_id={game_id}")
             return []
 
-        # Log estructura real para debug
-        if isinstance(data, list):
-            logger.info(f"history/v2 → lista de {len(data)} entradas. "
-                        f"Primera: {str(data[0])[:200] if data else '(vacía)'}")
+        # ITAD /games/history/v2 puede retornar varias estructuras según versión:
+        # A) Lista directa: [{timestamp, deal:{price,regular,cut,shop}}, ...]
+        # B) Dict con lista: {"list": [{...}], "urls": {...}}
+        # C) Lista de objetos planos: [{timestamp, price:{amount}, cut, shop:{id,name}}]
+        if isinstance(data, dict):
+            entries = data.get("list") or data.get("prices") or data.get("history") or []
+            if not entries:
+                # Intentar cualquier lista dentro del dict
+                for v in data.values():
+                    if isinstance(v, list) and v:
+                        entries = v
+                        break
+        elif isinstance(data, list):
+            entries = data
         else:
-            logger.info(f"history/v2 → dict con keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+            entries = []
+
+        if entries:
+            logger.info(f"history/v2 → {len(entries)} entradas para {game_id}. "
+                        f"Keys del primer entry: {list(entries[0].keys()) if isinstance(entries[0], dict) else type(entries[0])}")
+        else:
+            logger.warning(f"history/v2 sin entradas para {game_id}. Estructura: {str(data)[:300]}")
+            return []
 
         records = []
-        # La API devuelve una lista directa de price events
-        entries = data if isinstance(data, list) else data.get("prices", [])
-
         for entry in entries:
             try:
-                # Normalizar estructura (la API v2 puede variar)
-                deal = entry.get("deal") or entry
-                price_obj = deal.get("price") or entry.get("price") or {}
-                regular_obj = deal.get("regular") or entry.get("regular") or {}
-                shop = entry.get("shop") or {}
+                if not isinstance(entry, dict):
+                    continue
+
+                # Estructura A/C: deal anidado
+                deal = entry.get("deal") or {}
+
+                # Precio: puede estar en deal.price o directo en entry
+                price_obj    = deal.get("price") or entry.get("price") or {}
+                regular_obj  = deal.get("regular") or entry.get("regular") or {}
+                shop         = deal.get("shop") or entry.get("shop") or {}
+
+                price_amount   = price_obj.get("amount", 0) if isinstance(price_obj, dict) else float(price_obj or 0)
+                regular_amount = regular_obj.get("amount", 0) if isinstance(regular_obj, dict) else float(regular_obj or 0)
+                cut            = deal.get("cut") if "cut" in deal else entry.get("cut", 0)
+                ts             = entry.get("timestamp")
+
+                if not ts:
+                    continue
+
+                shop_id   = shop.get("id") if isinstance(shop, dict) else None
+                shop_name = shop.get("name", "Steam") if isinstance(shop, dict) else "Steam"
 
                 records.append(PriceRecord(
                     game_id=game_id,
                     appid=appid,
-                    timestamp=entry["timestamp"],
-                    price_usd=float(price_obj.get("amount", 0)),
-                    regular_usd=float(regular_obj.get("amount", 0)),
-                    cut_pct=int(deal.get("cut", entry.get("cut", 0)) or 0),
-                    shop_id=shop.get("id"),
-                    shop_name=shop.get("name", "Steam"),
+                    timestamp=ts,
+                    price_usd=float(price_amount or 0),
+                    regular_usd=float(regular_amount or 0),
+                    cut_pct=int(cut or 0),
+                    shop_id=shop_id,
+                    shop_name=shop_name,
                 ))
             except Exception as e:
-                logger.debug(f"Error parseando entry de historial: {e}")
+                logger.debug(f"Entry skip: {e} — {str(entry)[:100]}")
                 continue
 
+        logger.info(f"Parseados {len(records)}/{len(entries)} registros para {game_id}")
         return records
 
     async def search_games(self, query: str, limit: int = 20) -> list[ITADSearchResult]:
@@ -169,22 +200,16 @@ class ITADClient:
         }
         data = await self._get("/games/prices/v3", params)
         return data or {}
-    
+
+
     async def get_game_info(self, game_id: str) -> Optional[tuple[str, str, str]]:
-        """
-        Obtiene título y slug de un juego por su ITAD game_id.
-        Usa /games/info/v2. Retorna (game_id, slug, title) o None.
-        """
+        """Obtiene título y slug de un juego por su ITAD game_id."""
         data = await self._get("/games/info/v2", {"id": game_id})
         if not data:
             return None
         try:
-            # La API retorna un objeto con 'title' y 'slug'
-            if isinstance(data, list) and data:
-                item = data[0]
-            elif isinstance(data, dict):
-                item = data
-            else:
+            item = data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else None
+            if not item:
                 return None
             title = item.get("title") or item.get("name") or game_id
             slug  = item.get("slug") or game_id
@@ -205,5 +230,4 @@ def get_client() -> ITADClient:
     if _client_instance is None:
         _client_instance = ITADClient(settings.itad_api_key)
     return _client_instance
-
 

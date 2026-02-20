@@ -2,13 +2,15 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowLeft, RefreshCw, ExternalLink, BarChart3, Clock, Zap } from 'lucide-react'
+import { ArrowLeft, ExternalLink, BarChart3, Clock } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import PredictionBadge from '@/components/PredictionBadge'
 import PriceChart from '@/components/PriceChart'
+import PriceHistoryTable from '@/components/PriceHistoryTable'
 import SeasonalChart from '@/components/SeasonalChart'
 import StoreDeals from '@/components/StoreDeals'
 import PriceAlertBanner from '@/components/PriceAlertBanner'
+import NextSalePredictor from '@/components/NextSalePredictor'
 import { getGameStats, getPriceHistory, getPrediction } from '@/lib/api'
 import { formatDate, formatPrice, steamImageUrl } from '@/lib/utils'
 
@@ -45,11 +47,9 @@ export default async function GamePage({ params }: Props) {
               <h1 className="font-display font-bold text-2xl text-steam-text">Loading price data...</h1>
               <p className="text-steam-subtle mt-2 text-sm">This game is being synced. Refresh in a moment.</p>
             </div>
-            <div className="flex gap-3 justify-center">
-              <Link href="/" className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-steam-subtle text-sm font-mono hover:text-steam-text transition-colors">
-                <ArrowLeft size={14} /> Back
-              </Link>
-            </div>
+            <Link href="/" className="inline-flex items-center gap-2 px-5 py-2.5 glass rounded-xl text-steam-subtle text-sm font-mono hover:text-steam-text transition-colors">
+              <ArrowLeft size={14} /> Back
+            </Link>
           </div>
         </div>
       )
@@ -63,67 +63,63 @@ export default async function GamePage({ params }: Props) {
   const steamUrl   = stats.appid ? `https://store.steampowered.com/app/${stats.appid}` : null
   const headerImg  = steamImageUrl(stats.appid)
 
-  const currentPrice  = prediction?.price_context.current_price ?? 0
-  const minPrice      = stats.stats?.min_price ?? 0
-  const avgPrice      = stats.stats?.avg_price ?? 0
-  const discountPct   = prediction?.price_context.current_discount_pct ?? 0
+  const currentPrice = prediction?.price_context.current_price ?? 0
+  const minPrice     = stats.stats?.min_price ?? 0
+  const avgPrice     = stats.stats?.avg_price ?? 0
+  const discountPct  = prediction?.price_context.current_discount_pct ?? 0
 
   return (
     <div className="min-h-screen bg-steam-bg">
       <Navbar />
 
-      {/* Hero banner */}
-      <div className="relative h-56 overflow-hidden">
+      {/* Hero */}
+      <div className="relative h-64 overflow-hidden">
         {headerImg ? (
-          <Image src={headerImg} alt={stats.title} fill className="object-cover" unoptimized priority />
+          <Image src={headerImg} alt={stats.title} fill className="object-cover scale-105" unoptimized priority />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-steam-muted to-steam-card" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-steam-bg via-steam-bg/60 to-steam-bg/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-steam-bg via-steam-bg/50 to-transparent" />
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 -mt-16 pb-20">
-
-        {/* Back + title */}
+      <div className="max-w-6xl mx-auto px-6 -mt-20 pb-24">
         <Link href="/" className="inline-flex items-center gap-2 text-steam-subtle text-sm hover:text-steam-text transition-colors mb-5 font-mono">
-          <ArrowLeft size={14} /> Back to search
+          <ArrowLeft size={14} /> Back
         </Link>
 
-        <div className="flex items-start justify-between gap-4 mb-6">
+        {/* Title bar */}
+        <div className="flex items-start justify-between gap-4 mb-5">
           <div className="animate-slide-up">
             <h1 className="font-display font-bold text-3xl sm:text-4xl text-steam-text leading-tight">
               {stats.title}
             </h1>
             {stats.appid && (
-              <p className="text-steam-subtle text-sm font-mono mt-1">Steam App #{stats.appid}</p>
+              <p className="text-steam-subtle text-sm font-mono mt-1">App #{stats.appid}</p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 animate-slide-up-delay-1">
+          <div className="flex items-center gap-2 flex-shrink-0 mt-1">
             {steamUrl && (
               <a href={steamUrl} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-2 glass rounded-lg text-steam-subtle hover:text-steam-cyan text-xs font-mono transition-colors">
-                <ExternalLink size={12} /> View on Steam
+                <ExternalLink size={12} /> Steam
               </a>
             )}
           </div>
         </div>
 
-        {/* Price alert banner */}
+        {/* Alert banner */}
         {currentPrice > 0 && minPrice > 0 && (
           <div className="mb-6 animate-slide-up-delay-1">
-            <PriceAlertBanner
-              currentPrice={currentPrice} minPrice={minPrice}
-              discountPct={discountPct} avgPrice={avgPrice}
-            />
+            <PriceAlertBanner currentPrice={currentPrice} minPrice={minPrice}
+              discountPct={discountPct} avgPrice={avgPrice} />
           </div>
         )}
 
-        {/* Main grid */}
+        {/* 3-col layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* Left: prediction + stats */}
-          <div className="lg:col-span-1 space-y-5">
-
+          {/* Left column */}
+          <div className="space-y-5">
             {/* Prediction */}
             <div className="animate-slide-up-delay-1">
               {prediction
@@ -141,7 +137,7 @@ export default async function GamePage({ params }: Props) {
               }
             </div>
 
-            {/* Stat cards */}
+            {/* Stats grid */}
             {stats.stats && (
               <div className="space-y-3 animate-slide-up-delay-2">
                 <p className="text-steam-subtle text-xs font-mono uppercase tracking-widest">Price Stats</p>
@@ -151,14 +147,24 @@ export default async function GamePage({ params }: Props) {
                   <StatCard label="All-time high" value={formatPrice(stats.stats.max_price)} />
                   <StatCard label="Avg price"     value={formatPrice(stats.stats.avg_price)} />
                   <StatCard label="Best discount" value={`${stats.stats.max_discount ?? 0}%`} />
-                  <StatCard label="Sale avg"      value={`${stats.stats.avg_discount_when_on_sale?.toFixed(1) ?? '—'}%`} />
-                  <StatCard label="Records"       value={stats.stats.total_records?.toLocaleString() ?? '—'} />
+                  <StatCard label="Sale avg"      value={`${(stats.stats.avg_discount_when_on_sale ?? 0).toFixed(1)}%`} />
+                  <StatCard label="Records"       value={(stats.stats.total_records ?? 0).toLocaleString()} />
                 </div>
                 {stats.stats.first_seen && (
-                  <div className="glass rounded-xl px-4 py-3 text-xs text-steam-subtle font-mono">
-                    Tracked since <span className="text-steam-text">{formatDate(stats.stats.first_seen)}</span>
-                  </div>
+                  <p className="text-steam-subtle/60 text-xs font-mono px-1">
+                    Tracking since {formatDate(stats.stats.first_seen)}
+                  </p>
                 )}
+              </div>
+            )}
+
+            {/* Sale predictor */}
+            {history && stats.seasonal_patterns && (
+              <div className="animate-slide-up-delay-3">
+                <NextSalePredictor
+                  history={history.history}
+                  seasonal={stats.seasonal_patterns}
+                />
               </div>
             )}
 
@@ -169,39 +175,36 @@ export default async function GamePage({ params }: Props) {
             </div>
           </div>
 
-          {/* Right: charts */}
+          {/* Right column (2/3) */}
           <div className="lg:col-span-2 space-y-5">
+
+            {/* Price chart with range selector */}
             <div className="animate-slide-up-delay-2">
-              {history
+              {history?.history?.length
                 ? <PriceChart history={history.history} stats={stats.stats} />
                 : (
                   <div className="glass rounded-2xl p-8 text-center">
-                    <p className="text-steam-subtle text-sm">No price history available yet.</p>
+                    <p className="text-steam-subtle text-sm">No price history yet.</p>
                   </div>
                 )
               }
             </div>
 
+            {/* Seasonal chart */}
             {stats.seasonal_patterns?.length > 0 && (
               <div className="animate-slide-up-delay-3">
                 <SeasonalChart patterns={stats.seasonal_patterns} />
               </div>
             )}
 
-            {/* Footer hint */}
-            <div className="glass rounded-xl px-5 py-4 flex items-center justify-between animate-slide-up-delay-3">
-              <div>
-                <p className="text-steam-text text-sm font-semibold">Keep data fresh</p>
-                <p className="text-steam-subtle text-xs font-mono mt-0.5">
-                  Updated {stats.stats?.last_seen ? formatDate(stats.stats.last_seen) : '—'}
-                </p>
+            {/* Price history table */}
+            {history?.history?.length > 0 && (
+              <div className="animate-slide-up-delay-3">
+                <p className="text-steam-subtle text-xs font-mono uppercase tracking-widest mb-3">Full Price History</p>
+                <PriceHistoryTable history={history.history} />
               </div>
-              {stats.appid && (
-                <code className="text-steam-subtle/50 text-xs font-mono">
-                  POST /sync/game/{stats.appid}
-                </code>
-              )}
-            </div>
+            )}
+
           </div>
         </div>
       </div>

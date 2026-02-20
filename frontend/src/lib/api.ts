@@ -59,3 +59,36 @@ export const syncByAppid = async (appid: number) => {
   if (!res.ok) throw new Error('Sync failed')
   return res.json()
 }
+
+// ── User / Auth ───────────────────────────────────────────────────────────────
+
+async function userFetch<T>(path: string, token: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export const getMe = (token: string) =>
+  userFetch<{ steam_id: string; display_name: string; avatar_url: string }>('/auth/me', token)
+
+export const getLibrary = (token: string, sync = false) =>
+  userFetch<any>(`/me/library${sync ? '?sync=true' : ''}`, token)
+
+export const getWishlist = (token: string, sync = false) =>
+  userFetch<any>(`/me/wishlist${sync ? '?sync=true' : ''}`, token)
+
+export const getRecommendations = (token: string, limit = 12) =>
+  userFetch<any>(`/me/recommendations?limit=${limit}`, token)
+
+export const syncLibrary = (token: string) =>
+  fetch(`${BASE}/me/library/sync`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  }).then(r => r.json())
+
+export const checkOwned = (token: string, appid: number) =>
+  userFetch<{ owned: boolean }>(`/me/owned/${appid}`, token)
+
+export const steamLoginUrl = `${BASE}/auth/steam`
