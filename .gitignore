@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Entorno
+.env
+*.env
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+data/
+
+# ML artifacts (no commitear modelos grandes)
+backend/src/ml/artifacts/*.joblib
+backend/src/ml/artifacts/*.pkl
+
+# Node
+node_modules/
+.next/
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

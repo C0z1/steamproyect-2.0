@@ -1,0 +1,38 @@
+services:
+  # ── Backend FastAPI ────────────────────────────────────────
+  - type: web
+    name: steamsense-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+
+    disk:
+      name: steamsense-db
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      - key: ITAD_API_KEY
+        sync: false                   # Se configura en el dashboard de Render
+      - key: DUCKDB_PATH
+        value: /data/steamsense.duckdb
+      - key: ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://steamsense-frontend.onrender.com
+      - key: TOP_N_GAMES
+        value: "200"
+
+  # ── Frontend Next.js ───────────────────────────────────────
+  - type: web
+    name: steamsense-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://steamsense-backend.onrender.com
