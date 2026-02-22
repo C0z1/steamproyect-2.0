@@ -4,17 +4,18 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Loader2, Gamepad2, RefreshCw } from 'lucide-react'
 import { searchGames, syncByGameId } from '@/lib/api'
+import { steamImageUrl } from '@/lib/utils'
 import type { SearchResult } from '@/lib/types'
 
 export default function GameSearch() {
   const [query, setQuery]     = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
-  const [syncing, setSyncing] = useState<string | null>(null)  // game_id being synced
+  const [syncing, setSyncing] = useState<string | null>(null)
   const [open, setOpen]       = useState(false)
   const [error, setError]     = useState('')
-  const debounce  = useRef<ReturnType<typeof setTimeout>>(null)
-  const router    = useRouter()
+  const debounce   = useRef<ReturnType<typeof setTimeout>>(null)
+  const router     = useRouter()
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -54,7 +55,6 @@ export default function GameSearch() {
     setQuery('')
     setSyncing(game.id)
     try {
-      // Sync the game into DuckDB before navigating
       await syncByGameId(game.id)
     } catch {
       // Even if sync fails, try navigating — maybe it's already in DB
@@ -114,35 +114,60 @@ export default function GameSearch() {
       {/* Dropdown */}
       {open && results.length > 0 && !syncing && (
         <div className="
-          absolute z-50 w-full mt-2
+          absolute z-50 w-full mt-4
           bg-steam-card border border-steam-border
-          rounded-xl overflow-hidden
+          rounded-xl overflow-y-auto max-h-72
           shadow-2xl shadow-black/50
           animate-fade-in
         ">
-          {results.map((game, i) => (
-            <button
-              key={game.id}
-              onClick={() => handleSelect(game)}
-              className="
-                w-full flex items-center gap-3 px-4 py-3
-                hover:bg-steam-muted
-                border-b border-steam-border last:border-0
-                transition-colors text-left group
-              "
-            >
-              <div className="w-8 h-8 rounded-lg bg-steam-muted flex items-center justify-center flex-shrink-0 group-hover:bg-steam-cyan/10 transition-colors">
-                <Gamepad2 size={14} className="text-steam-subtle group-hover:text-steam-cyan transition-colors" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-steam-text text-sm font-medium truncate">{game.title}</div>
-                {game.type && (
-                  <div className="text-steam-subtle text-xs capitalize">{game.type}</div>
-                )}
-              </div>
-              <div className="text-steam-subtle text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity">→</div>
-            </button>
-          ))}
+          {results.map((game) => {
+            // ITAD search results no traen appid directamente,
+            // pero el slug a veces contiene el nombre que podemos usar para el fallback.
+            // Si en el futuro el backend devuelve appid en search, esto lo tomará automáticamente.
+            const appid = (game as any).appid ?? null
+            const img   = steamImageUrl(appid, 'capsule')
+
+            return (
+              <button
+                key={game.id}
+                onClick={() => handleSelect(game)}
+                className="
+                  w-full flex items-center gap-3 px-3 py-2.5
+                  hover:bg-steam-muted
+                  border-b border-steam-border last:border-0
+                  transition-colors text-left group
+                "
+              >
+                {/* Thumbnail */}
+                <div className="w-16 h-9 rounded-lg overflow-hidden bg-steam-muted flex-shrink-0 flex items-center justify-center">
+                  {img ? (
+                    <img
+                      src={img}
+                      alt={game.title}
+                      className="w-full h-full object-cover"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                  ) : (
+                    <Gamepad2 size={14} className="text-steam-subtle group-hover:text-steam-cyan transition-colors" />
+                  )}
+                </div>
+
+                {/* Title + type */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-steam-text text-sm font-medium truncate group-hover:text-steam-cyan transition-colors">
+                    {game.title}
+                  </div>
+                  {game.type && (
+                    <div className="text-steam-subtle text-xs capitalize">{game.type}</div>
+                  )}
+                </div>
+
+                <div className="text-steam-subtle text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  →
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

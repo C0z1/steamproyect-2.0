@@ -25,10 +25,10 @@ _local = threading.local()
 _db_path: Optional[str] = None
 
 
-def init_db() -> duckdb.DuckDBPyConnection:
+def init_db():
     """
-    Inicializa la ruta de la DB al arrancar la app.
-    No abre una conexión aquí — cada thread abre la suya al primer get_db().
+    Configura la ruta de la DB al arrancar la app.
+    No abre conexión aquí — get_db() lo hace por thread.
     """
     global _db_path
 
@@ -37,10 +37,6 @@ def init_db() -> duckdb.DuckDBPyConnection:
     _db_path = db_path
 
     logger.info(f"DuckDB configurado en: {db_path}")
-
-    # Abrir conexión principal para crear tablas
-    con = _open_connection()
-    return con
 
 
 def _open_connection() -> duckdb.DuckDBPyConnection:

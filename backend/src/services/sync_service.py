@@ -28,7 +28,7 @@ async def get_top_appids(client: httpx.AsyncClient, top_n: int) -> list[int]:
 
 
 async def sync_by_appid(appid: int) -> dict:
-    """Sincroniza un juego por Steam appid."""
+    """Sincroniza un juego por Steam appid. Usado por POST /sync/game/{appid}."""
     con = get_db()
     async with ITADClient(settings.itad_api_key) as client:
         lookup = await client.lookup_game(appid)
@@ -52,41 +52,24 @@ async def sync_by_appid(appid: int) -> dict:
 async def sync_by_game_id(game_id: str) -> dict:
     """
     Sincroniza un juego por ITAD game_id.
-    Obtiene título real de ITAD y luego el historial de precios.
+    Usado cuando el usuario hace click en un resultado de búsqueda —
+    ya tenemos el game_id de ITAD pero el juego puede no estar en DB.
     """
     con = get_db()
-
-    async with ITADClient(settings.itad_api_key) as client:
-        # 1. Obtener título real del juego
-        info = await client.get_game_info(game_id)
-        if info:
-            _, slug, title = info
-        else:
-            slug, title = game_id, game_id  # fallback
-
-        # 2. Guardar/actualizar en games table
+    existing = queries.get_game(con, game_id)
+    if not existing:
         try:
-            queries.upsert_game(con, game_id=game_id, slug=slug, title=title, appid=None)
-        except Exception as e:
-            logger.debug(f"upsert_game skip: {e}")
-
-        # Actualizar título aunque el juego ya exista
-        try:
-            con.execute("UPDATE games SET title = ?, slug = ? WHERE id = ? AND title = ?",
-                        [title, slug, game_id, game_id])
+            queries.upsert_game(con, game_id=game_id, slug=game_id,
+                                title=game_id, appid=None)
         except Exception:
             pass
-
-        # 3. Obtener historial
+    async with ITADClient(settings.itad_api_key) as client:
         records = await client.get_price_history(game_id)
-        logger.info(f"Historial para {title}: {len(records)} registros")
-
         if not records:
-            return {"game_id": game_id, "title": title, "status": "no_history", "inserted": 0}
-
+            return {"game_id": game_id, "status": "no_history", "inserted": 0}
         inserted = queries.upsert_price_records(con, [r.model_dump() for r in records])
-        logger.info(f"✓ {title}: {inserted} nuevos registros insertados")
-        return {"game_id": game_id, "title": title, "status": "ok", "inserted": inserted}
+        logger.info(f"✓ game_id={game_id}: {inserted} registros")
+        return {"game_id": game_id, "status": "ok", "inserted": inserted}
 
 
 async def sync_top_games(top_n: int = 100) -> dict:

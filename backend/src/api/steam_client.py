@@ -94,23 +94,41 @@ class SteamClient:
                 return []
             return r.json().get("response", {}).get("games", [])
 
-    async def get_wishlist(self, steam_id: str) -> list[dict]:
-        """Wishlist pública — no requiere API key."""
-        async with httpx.AsyncClient(timeout=20) as client:
+    async def get_wishlist(self, steam_id: str) -> dict:
+        """
+        Wishlist pública — no requiere API key.
+        Returns: {"items": [...], "status": "ok"|"private"|"error"}
+        - status "private" only when HTTP 403 (Steam blocks access for private profiles)
+        - status "error" when network/parse issues — do NOT assume private
+        - status "ok" when we got valid JSON (items may be empty)
+        """
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             r = await client.get(
                 f"https://store.steampowered.com/wishlist/profiles/{steam_id}/wishlistdata/",
-                params={"p": 0}
+                params={"p": 0},
+                headers={"Accept": "application/json"},
             )
+            if r.status_code == 403:
+                logger.warning(f"Wishlist HTTP 403 para {steam_id} — perfil privado")
+                return {"items": [], "status": "private"}
             if r.status_code != 200:
-                logger.warning(f"Wishlist HTTP {r.status_code} para {steam_id} — puede ser privada")
-                return []
-            data = r.json()
+                logger.warning(f"Wishlist HTTP {r.status_code} para {steam_id} — error de red/servidor")
+                return {"items": [], "status": "error"}
+            try:
+                data = r.json()
+            except Exception:
+                logger.warning(f"Wishlist respuesta no es JSON para {steam_id}")
+                return {"items": [], "status": "error"}
+            if isinstance(data, list):
+                logger.info(f"Wishlist vacía (lista) para {steam_id}")
+                return {"items": [], "status": "ok"}
             if not isinstance(data, dict):
-                return []
+                logger.warning(f"Wishlist formato inesperado para {steam_id}: {type(data)}")
+                return {"items": [], "status": "error"}
             items = [{"appid": int(k), "title": v.get("name", f"App {k}")}
                      for k, v in data.items() if isinstance(v, dict)]
             logger.info(f"Wishlist: {len(items)} items para {steam_id}")
-            return items
+            return {"items": items, "status": "ok"}
 
 
 _steam_client: Optional[SteamClient] = None

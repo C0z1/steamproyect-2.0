@@ -5,9 +5,10 @@ import type {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-async function apiFetch<T>(path: string, revalidate = 60): Promise<T> {
+async function apiFetch<T>(path: string, revalidate = 60, fallback?: T): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { next: { revalidate } })
   if (!res.ok) {
+    if (fallback !== undefined) return fallback
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || `HTTP ${res.status}`)
   }
@@ -24,24 +25,33 @@ export const getOverviewStats = () => apiFetch<OverviewStats>('/stats/overview',
 export const searchGames = (q: string) =>
   apiFetch<SearchResult[]>(`/games/search?q=${encodeURIComponent(q)}`, 0)
 
-export const listGames = (limit = 50, offset = 0) =>
-  apiFetch<Game[]>(`/games?limit=${limit}&offset=${offset}`, 30)
+export const listGames = async (limit = 50, offset = 0): Promise<Game[]> => {
+  const data = await apiFetch<any>(`/games?limit=${limit}&offset=${offset}`, 30)
+  return Array.isArray(data) ? data : (data?.games ?? data?.list ?? [])
+}
 
 export const getGameStats = (gameId: string) =>
   apiFetch<GameStatsResponse>(`/games/${gameId}`, 60)
 
-export const getTopDeals = (limit = 12) =>
-  apiFetch<TopDeal[]>(`/games/top/deals?limit=${limit}`, 30)
+export const getTopDeals = async (limit = 24): Promise<TopDeal[]> => {
+  const data = await apiFetch<any>(`/games/top/deals?limit=${limit}`, 30)
+  return Array.isArray(data) ? data : (data?.deals ?? data?.list ?? [])
+}
 
-export const getTopBuySignals = (limit = 12) =>
-  apiFetch<BuySignal[]>(`/games/top/buy?limit=${limit}`, 30)
+export const getTopBuySignals = async (limit = 24): Promise<BuySignal[]> => {
+  const data = await apiFetch<any>(`/games/top/buy?limit=${limit}`, 30)
+  return Array.isArray(data) ? data : (data?.signals ?? data?.list ?? [])
+}
 
 export const getCurrentPrices = (gameId: string) =>
   apiFetch<CurrentPricesResponse>(`/games/${gameId}/current-prices`, 10)
 
 // Prices
 export const getPriceHistory = (gameId: string, since?: string) =>
-  apiFetch<PriceHistoryResponse>(`/prices/${gameId}/history${since ? `?since=${since}` : ''}`, 60)
+  apiFetch<PriceHistoryResponse>(
+    `/prices/${gameId}/history${since ? `?since=${since}` : ''}`, 60,
+    { game_id: gameId, title: '', count: 0, history: [] } as PriceHistoryResponse
+  )
 
 // Predictions
 export const getPrediction = (gameId: string, forceRefresh = false) =>

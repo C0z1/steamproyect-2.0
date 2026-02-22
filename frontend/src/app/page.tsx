@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Navbar from '@/components/Navbar'
 import GameSearch from '@/components/GameSearch'
 import GameCard from '@/components/GameCard'
+import EmptyStateWithSeed from '@/components/EmptyStateWithSeed'
 import { getTopDeals, getTopBuySignals, getOverviewStats } from '@/lib/api'
 import type { TopDeal, BuySignal } from '@/lib/types'
 
@@ -60,14 +61,7 @@ async function TopDealsSection() {
   let deals: TopDeal[] = []
   try { deals = await getTopDeals(8) } catch {}
 
-  if (!deals.length) return (
-    <div className="text-center py-10 space-y-3">
-      <p className="text-steam-subtle text-sm">No deals yet — run a sync to populate data.</p>
-      <code className="block text-xs text-steam-cyan/60 font-mono">
-        curl -X POST http://localhost:8000/sync/top?top_n=50
-      </code>
-    </div>
-  )
+  if (!deals.length) return <EmptyStateWithSeed />
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -88,8 +82,12 @@ async function BuySignalsSection() {
   try { signals = await getTopBuySignals(8) } catch {}
 
   if (!signals.length) return (
-    <div className="text-center py-10">
-      <p className="text-steam-subtle text-sm">No predictions yet — browse a game to generate one.</p>
+    <div className="text-center py-10 space-y-3">
+      <p className="text-steam-subtle text-sm">No BUY signals yet.</p>
+      <a href="/explore?tab=buy"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-steam-green/10 border border-steam-green/30 rounded-xl text-steam-green text-xs font-mono hover:bg-steam-green/20 transition-all">
+        Generate Predictions →
+      </a>
     </div>
   )
 

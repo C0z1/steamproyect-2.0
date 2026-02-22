@@ -4,19 +4,45 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Gamepad2, Activity, LogOut, User, Library, Heart, Sparkles } from 'lucide-react'
+import { Gamepad2, Activity, LogOut, User, Library, Heart, Sparkles, Sun, Moon } from 'lucide-react'
 import { getUserFromStorage, clearToken, type SteamUser } from '@/lib/auth'
 import { steamLoginUrl } from '@/lib/api'
+
+// ── Theme hook ────────────────────────────────────────────────────────────────
+
+function useTheme() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    // Leer preferencia guardada o usar dark por defecto
+    const saved = localStorage.getItem('steamsense_theme') as 'dark' | 'light' | null
+    const initial = saved ?? 'dark'
+    setTheme(initial)
+    document.documentElement.classList.toggle('light', initial === 'light')
+  }, [])
+
+  const toggle = () => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    document.documentElement.classList.toggle('light', next === 'light')
+    localStorage.setItem('steamsense_theme', next)
+  }
+
+  return { theme, toggle }
+}
+
+// ── Navbar ────────────────────────────────────────────────────────────────────
 
 export default function Navbar() {
   const pathname = usePathname()
   const router   = useRouter()
+  const { theme, toggle } = useTheme()
   const [user, setUser]     = useState<SteamUser | null>(null)
   const [menuOpen, setMenu] = useState(false)
 
   useEffect(() => {
     setUser(getUserFromStorage())
-  }, [pathname]) // re-check on route change (after login callback)
+  }, [pathname])
 
   const logout = () => {
     clearToken()
@@ -25,8 +51,8 @@ export default function Navbar() {
   }
 
   const navLinks = [
-    { href: '/',        label: 'Search'  },
-    { href: '/explore', label: 'Explore' },
+    { href: '/',        label: 'Search'    },
+    { href: '/explore', label: 'Explore'   },
     ...(user ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
   ]
 
@@ -51,7 +77,9 @@ export default function Navbar() {
             return (
               <Link key={href} href={href}
                 className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
-                  active ? 'bg-steam-cyan/10 text-steam-cyan' : 'text-steam-subtle hover:text-steam-text hover:bg-steam-muted'
+                  active
+                    ? 'bg-steam-cyan/10 text-steam-cyan'
+                    : 'text-steam-subtle hover:text-steam-text hover:bg-steam-muted'
                 }`}>
                 {label}
               </Link>
@@ -59,13 +87,29 @@ export default function Navbar() {
           })}
         </div>
 
-        {/* Right: status + auth */}
+        {/* Right: status + theme toggle + auth */}
         <div className="flex items-center gap-3">
+
+          {/* Live indicator */}
           <div className="hidden sm:flex items-center gap-1.5 text-steam-subtle text-xs font-mono">
             <Activity size={10} className="text-steam-green" />
             <span className="text-steam-green">Live</span>
           </div>
 
+          {/* Theme toggle */}
+          <button
+            onClick={toggle}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="w-8 h-8 flex items-center justify-center rounded-lg glass hover:border-steam-cyan/30 transition-all group"
+          >
+            {theme === 'dark' ? (
+              <Sun size={14} className="text-steam-subtle group-hover:text-steam-amber transition-colors" />
+            ) : (
+              <Moon size={14} className="text-steam-subtle group-hover:text-steam-cyan transition-colors" />
+            )}
+          </button>
+
+          {/* Auth */}
           {user ? (
             <div className="relative">
               <button
@@ -92,9 +136,9 @@ export default function Navbar() {
                     <p className="text-steam-subtle text-xs font-mono mt-0.5">Steam ID: {user.steam_id.slice(-8)}</p>
                   </div>
                   {[
-                    { href: '/dashboard',           icon: Library,  label: 'My Dashboard' },
-                    { href: '/dashboard?tab=wishlist',  icon: Heart,    label: 'Wishlist' },
-                    { href: '/dashboard?tab=recs',   icon: Sparkles, label: 'Recommendations' },
+                    { href: '/dashboard',              icon: Library,  label: 'My Dashboard'    },
+                    { href: '/dashboard?tab=wishlist', icon: Heart,    label: 'Wishlist'         },
+                    { href: '/dashboard?tab=recs',     icon: Sparkles, label: 'Recommendations' },
                   ].map(({ href, icon: Icon, label }) => (
                     <Link key={href} href={href} onClick={() => setMenu(false)}
                       className="flex items-center gap-3 px-4 py-2.5 text-steam-subtle text-xs font-mono hover:text-steam-text hover:bg-steam-muted transition-colors">

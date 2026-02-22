@@ -6,24 +6,123 @@ import Image from 'next/image'
 import Link from 'next/link'
 import {
   Library, Heart, Sparkles, RefreshCw, Clock, TrendingDown,
-  Zap, ChevronRight, Star, Database, AlertTriangle
+  Zap, ChevronRight, Star, Database, AlertTriangle,
+  Lock, CheckCircle, ExternalLink
 } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import GameCard from '@/components/GameCard'
+import ProfileInsights from '@/components/ProfileInsights'
+import PriceAlertButton from '../../components/PriceAlertButton'
 import { getToken, getUserFromStorage, type SteamUser } from '@/lib/auth'
 import { getLibrary, getWishlist, getRecommendations, syncLibrary } from '@/lib/api'
 import { formatPrice, formatDate, timeAgo, steamImageUrl } from '@/lib/utils'
 
-// ── Tab types ─────────────────────────────────────────────────────────────────
+const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 type Tab = 'library' | 'wishlist' | 'recs'
+
+// ── Setup Guide ───────────────────────────────────────────────────────────────
+
+function SetupGuide() {
+  const [step1Loading, setStep1Loading] = useState(false)
+  const [step2Loading, setStep2Loading] = useState(false)
+  const [step1Done, setStep1Done]       = useState(false)
+  const [step2Done, setStep2Done]       = useState(false)
+
+  const handleSyncTop = async () => {
+    setStep1Loading(true)
+    try {
+      await fetch(`${BASE}/sync/top?top_n=100`, { method: 'POST' })
+      setStep1Done(true)
+    } catch { } finally { setStep1Loading(false) }
+  }
+
+  const handleGenPredictions = async () => {
+    setStep2Loading(true)
+    try {
+      await fetch(`${BASE}/sync/predictions?limit=200`, { method: 'POST' })
+      setStep2Done(true)
+    } catch { } finally { setStep2Loading(false) }
+  }
+
+  return (
+    <div className="glass rounded-2xl p-6 border border-steam-amber/20 bg-steam-amber/5 space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-steam-amber/20 flex items-center justify-center flex-shrink-0">
+          <Zap size={15} className="text-steam-amber" />
+        </div>
+        <div>
+          <p className="text-steam-text text-sm font-semibold">First-time setup — populate the database</p>
+          <p className="text-steam-subtle text-xs mt-0.5">Run these steps once to get BUY signals and recommendations working.</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {/* Step 1 */}
+        <div className="flex items-start gap-4 p-4 glass rounded-xl">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5 ${step1Done ? 'bg-steam-green/20 text-steam-green' : 'bg-steam-muted text-steam-subtle'}`}>
+            {step1Done ? <CheckCircle size={14} /> : '1'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-steam-text text-sm font-semibold">Sync top 100 games</p>
+            <p className="text-steam-subtle text-xs mt-0.5 leading-relaxed">
+              Downloads price history from IsThereAnyDeal for the 100 most popular Steam games. Runs in background (~1–2 min).
+            </p>
+          </div>
+          <button
+            onClick={handleSyncTop}
+            disabled={step1Loading || step1Done}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono transition-all disabled:opacity-60 ${step1Done ? 'bg-steam-green/10 text-steam-green border border-steam-green/20' : 'bg-steam-cyan/10 border border-steam-cyan/20 text-steam-cyan hover:bg-steam-cyan/20'}`}
+          >
+            {step1Loading && <RefreshCw size={11} className="animate-spin" />}
+            {step1Done ? 'Started ✓' : 'Run Sync'}
+          </button>
+        </div>
+
+        {/* Step 2 */}
+        <div className="flex items-start gap-4 p-4 glass rounded-xl">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5 ${step2Done ? 'bg-steam-green/20 text-steam-green' : 'bg-steam-muted text-steam-subtle'}`}>
+            {step2Done ? <CheckCircle size={14} /> : '2'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-steam-text text-sm font-semibold">Generate ML predictions</p>
+            <p className="text-steam-subtle text-xs mt-0.5 leading-relaxed">
+              Runs the BUY/WAIT model on all synced games. Do this after step 1 finishes.
+            </p>
+          </div>
+          <button
+            onClick={handleGenPredictions}
+            disabled={step2Loading || step2Done}
+            className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono transition-all disabled:opacity-60 ${step2Done ? 'bg-steam-green/10 text-steam-green border border-steam-green/20' : 'bg-steam-cyan/10 border border-steam-cyan/20 text-steam-cyan hover:bg-steam-cyan/20'}`}
+          >
+            {step2Loading && <RefreshCw size={11} className="animate-spin" />}
+            {step2Done ? 'Started ✓' : 'Generate'}
+          </button>
+        </div>
+
+        {/* Step 3 */}
+        <div className="flex items-start gap-4 p-4 glass rounded-xl opacity-70">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5 bg-steam-muted text-steam-subtle">3</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-steam-text text-sm font-semibold">Refresh the page after ~2 min</p>
+            <p className="text-steam-subtle text-xs mt-0.5 leading-relaxed">
+              Come back after the background jobs finish. You'll see BUY signals, deals, and recommendations.
+              You can also search any game manually — it auto-syncs price data on click.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── Library tab ───────────────────────────────────────────────────────────────
 
 function LibraryTab({ token }: { token: string }) {
-  const [data, setData]       = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
+  const [data, setData]           = useState<any>(null)
+  const [loading, setLoading]     = useState(true)
+  const [syncing, setSyncing]     = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -46,18 +145,19 @@ function LibraryTab({ token }: { token: string }) {
 
   if (loading) return <LoadingSkeleton />
 
-  const stats  = data?.stats  || {}
-  const games  = data?.games  || []
+  const stats   = data?.stats || {}
+  const games   = data?.games || []
   const tracked = games.filter((g: any) => g.game_id)
 
   return (
     <div className="space-y-6">
-      {/* Library stats */}
+
+      {/* ── Stats row ────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total Games',   value: stats.total_games   || 0, icon: Library  },
-          { label: 'Hours Played',  value: `${stats.total_hours || 0}h`, icon: Clock },
-          { label: 'Tracked in DB', value: stats.tracked_games || 0, icon: Database  },
+          { label: 'Total Games',   value: stats.total_games   || 0,         icon: Library  },
+          { label: 'Hours Played',  value: `${stats.total_hours || 0}h`,     icon: Clock    },
+          { label: 'Tracked in DB', value: stats.tracked_games || 0,         icon: Database },
         ].map(({ label, value, icon: Icon }) => (
           <div key={label} className="glass rounded-xl p-4 text-center">
             <Icon size={18} className="text-steam-cyan mx-auto mb-2" />
@@ -67,28 +167,57 @@ function LibraryTab({ token }: { token: string }) {
         ))}
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-3">
+      {/* ── Actions ──────────────────────────────────────────────────────────── */}
+      <div className="flex gap-3 flex-wrap">
         <button onClick={handleSync} disabled={syncing}
           className="flex items-center gap-2 px-4 py-2 glass rounded-xl text-sm font-mono text-steam-subtle hover:text-steam-text transition-all disabled:opacity-50">
           <RefreshCw size={14} className={syncing ? 'animate-spin text-steam-cyan' : ''} />
           {syncing ? 'Syncing...' : 'Sync with Steam'}
         </button>
+        <button onClick={() => setShowSetup(v => !v)}
+          className={`flex items-center gap-2 px-4 py-2 glass rounded-xl text-sm font-mono transition-all ${showSetup ? 'text-steam-amber border-steam-amber/30' : 'text-steam-subtle hover:text-steam-text'}`}>
+          <Zap size={14} />
+          Setup Guide
+        </button>
       </div>
 
-      {/* Games grid */}
+      {showSetup && <SetupGuide />}
+
+      {/* ── Warning: importado pero sin datos ────────────────────────────────── */}
+      {games.length > 0 && tracked.length === 0 && (
+        <div className="glass rounded-xl px-5 py-4 border border-steam-amber/20 bg-steam-amber/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={15} className="text-steam-amber flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-steam-amber text-sm font-semibold">Library imported — no price data yet</p>
+              <p className="text-steam-subtle text-xs mt-1 leading-relaxed">
+                Your {games.length} games are saved, but none have price history in the database.
+                Use the <button onClick={() => setShowSetup(true)} className="text-steam-cyan underline">Setup Guide</button> above to populate it, or search individual games.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Profile Insights ─────────────────────────────────────────────────── */}
+      {games.length > 0 && (
+        <ProfileInsights games={games} />
+      )}
+
+      {/* ── Games list ───────────────────────────────────────────────────────── */}
       {games.length === 0 ? (
-        <EmptyState msg="No library data yet. Click Sync with Steam to import your games." icon={Library} />
+        <EmptyState msg="No library data yet. Click 'Sync with Steam' to import your games. Make sure your Steam profile is public." icon={Library} />
       ) : (
         <div className="space-y-2">
-          {games.map((g: any, i: number) => (
+          <h3 className="text-steam-text text-sm font-semibold pt-2">All Games</h3>
+          {games.map((g: any) => (
             <div key={g.appid}
               className="glass glass-hover rounded-xl flex items-center gap-4 px-4 py-3 group">
+
               {/* Image */}
               <div className="w-16 h-9 rounded-lg overflow-hidden bg-steam-muted flex-shrink-0">
                 {steamImageUrl(g.appid) ? (
-                  <img src={steamImageUrl(g.appid)!} alt={g.game_title}
-                    className="w-full h-full object-cover" />
+                  <img src={steamImageUrl(g.appid)!} alt={g.game_title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-steam-muted" />
                 )}
@@ -106,13 +235,13 @@ function LibraryTab({ token }: { token: string }) {
               </div>
 
               {/* Price info */}
-              {g.game_id && (
+              {g.game_id ? (
                 <div className="text-right flex-shrink-0">
                   <p className="text-steam-subtle text-xs font-mono">avg price</p>
-                  <p className="text-steam-text text-sm font-mono font-semibold">
-                    {formatPrice(g.avg_price)}
-                  </p>
+                  <p className="text-steam-text text-sm font-mono font-semibold">{formatPrice(g.avg_price)}</p>
                 </div>
+              ) : (
+                <span className="text-steam-subtle/40 text-xs font-mono flex-shrink-0">no data</span>
               )}
 
               {/* Link */}
@@ -133,9 +262,10 @@ function LibraryTab({ token }: { token: string }) {
 // ── Wishlist tab ──────────────────────────────────────────────────────────────
 
 function WishlistTab({ token }: { token: string }) {
-  const [data, setData]       = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
+  const [data, setData]         = useState<any[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [syncing, setSyncing]   = useState(false)
+  const [syncMeta, setSyncMeta] = useState<any>(null)
 
   const load = useCallback(async () => {
     try {
@@ -148,9 +278,11 @@ function WishlistTab({ token }: { token: string }) {
 
   const handleSync = async () => {
     setSyncing(true)
+    setSyncMeta(null)
     try {
       const d = await getWishlist(token, true)
       setData(d.wishlist || [])
+      if (d.sync_meta) setSyncMeta(d.sync_meta)
     } catch { } finally { setSyncing(false) }
   }
 
@@ -160,11 +292,66 @@ function WishlistTab({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
+
+      {/* Sync feedback */}
+      {syncMeta && (
+        <div className={`glass rounded-xl px-5 py-4 border ${
+          syncMeta.private_profile
+            ? 'border-red-500/30 bg-red-500/5'
+            : syncMeta.error
+            ? 'border-steam-amber/20 bg-steam-amber/5'
+            : 'border-steam-green/20 bg-steam-green/5'
+        }`}>
+          <div className="flex items-start gap-3">
+            {syncMeta.private_profile ? (
+              <Lock size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
+            ) : syncMeta.error ? (
+              <AlertTriangle size={15} className="text-steam-amber flex-shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle size={15} className="text-steam-green flex-shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1">
+              {syncMeta.private_profile ? (
+                <>
+                  <p className="text-red-400 text-sm font-semibold">Wishlist is private</p>
+                  <p className="text-steam-subtle text-xs mt-1 leading-relaxed">
+                    Go to Steam → your Profile → Edit Profile → Privacy Settings
+                    → set <span className="text-steam-text font-semibold">"Game details"</span> to <span className="text-steam-text font-semibold">Public</span>.
+                  </p>
+                  <a href="https://store.steampowered.com/account/communityoptions"
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs font-mono text-steam-cyan hover:underline">
+                    Open Steam Privacy Settings <ExternalLink size={10} />
+                  </a>
+                </>
+              ) : syncMeta.error ? (
+                <>
+                  <p className="text-steam-amber text-sm font-semibold">Sync issue</p>
+                  <p className="text-steam-subtle text-xs mt-1">{syncMeta.error}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-steam-green text-sm font-semibold">
+                    Wishlist synced — {syncMeta.items_found} items found
+                  </p>
+                  <p className="text-steam-subtle text-xs mt-1">
+                    {syncMeta.items_imported} items imported. Price data loading in background.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alerts banner */}
       {alerts.length > 0 && (
         <div className="glass rounded-xl px-5 py-4 border border-steam-amber/20 bg-steam-amber/5">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle size={14} className="text-steam-amber" />
-            <p className="text-steam-amber text-sm font-semibold">{alerts.length} wishlist item{alerts.length > 1 ? 's' : ''} worth checking</p>
+            <p className="text-steam-amber text-sm font-semibold">
+              {alerts.length} wishlist item{alerts.length > 1 ? 's' : ''} worth checking
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {alerts.map(g => (
@@ -177,23 +364,25 @@ function WishlistTab({ token }: { token: string }) {
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
         <button onClick={handleSync} disabled={syncing}
           className="flex items-center gap-2 px-4 py-2 glass rounded-xl text-sm font-mono text-steam-subtle hover:text-steam-text disabled:opacity-50 transition-all">
           <RefreshCw size={14} className={syncing ? 'animate-spin text-steam-cyan' : ''} />
           {syncing ? 'Syncing...' : 'Sync wishlist'}
         </button>
+        {/* Alertas de precio via Notifications API */}
+        {data.length > 0 && <PriceAlertButton wishlist={data} />}
       </div>
 
       {data.length === 0 ? (
-        <EmptyState msg="No wishlist data. Click Sync wishlist to import from Steam." icon={Heart} />
+        <EmptyState msg="No wishlist data. Click 'Sync wishlist' to import from Steam. Make sure your Steam profile privacy is set to Public." icon={Heart} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {data.map((g: any) => {
-            const isOnSale  = g.discount_pct > 0
-            const isBuy     = g.signal === 'BUY'
-            const isAtLow   = g.current_price > 0 && g.all_time_low > 0
-                              && g.current_price <= g.all_time_low * 1.05
+            const isOnSale = g.discount_pct > 0
+            const isBuy    = g.signal === 'BUY'
+            const isAtLow  = g.current_price > 0 && g.all_time_low > 0
+                             && g.current_price <= g.all_time_low * 1.05
             return (
               <div key={g.appid} className={`glass glass-hover rounded-xl overflow-hidden group ${
                 isBuy ? 'border-steam-green/20' : isOnSale ? 'border-steam-amber/20' : ''
@@ -218,9 +407,7 @@ function WishlistTab({ token }: { token: string }) {
                         </span>
                       )}
                       {isAtLow && (
-                        <span className="text-xs font-mono bg-steam-cyan/10 text-steam-cyan px-1.5 py-0.5 rounded">
-                          ATL
-                        </span>
+                        <span className="text-xs font-mono bg-steam-cyan/10 text-steam-cyan px-1.5 py-0.5 rounded">ATL</span>
                       )}
                       {isBuy && (
                         <span className="text-xs font-mono bg-steam-green/10 text-steam-green px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -266,10 +453,23 @@ function RecsTab({ token }: { token: string }) {
   if (loading) return <LoadingSkeleton />
 
   if (!recs.length) return (
-    <EmptyState
-      msg="No recommendations yet. Sync your library and browse some games so the model can generate BUY signals."
-      icon={Sparkles}
-    />
+    <div className="space-y-4">
+      <EmptyState
+        msg="No recommendations yet. Sync your library and populate the database so the model can generate BUY signals."
+        icon={Sparkles}
+      />
+      <div className="glass rounded-xl px-5 py-4 border border-steam-cyan/20">
+        <p className="text-steam-cyan text-sm font-semibold flex items-center gap-2 mb-3">
+          <Zap size={13} /> How to get recommendations
+        </p>
+        <ol className="text-steam-subtle text-xs space-y-2 list-decimal list-inside leading-relaxed">
+          <li>Go to <span className="text-steam-text">Library</span> tab → click <span className="text-steam-text">"Setup Guide"</span></li>
+          <li>Run <span className="text-steam-text">"Run Sync"</span> to download price history for 100 games</li>
+          <li>Run <span className="text-steam-text">"Generate"</span> to create BUY/WAIT predictions</li>
+          <li>Come back here after ~2 min — you'll see games you don't own worth buying</li>
+        </ol>
+      </div>
+    </div>
   )
 
   return (
@@ -293,7 +493,7 @@ function RecsTab({ token }: { token: string }) {
 function LoadingSkeleton() {
   return (
     <div className="space-y-3">
-      {[1,2,3,4].map(i => (
+      {[1, 2, 3, 4].map(i => (
         <div key={i} className="glass rounded-xl h-16 animate-pulse shimmer" />
       ))}
     </div>
@@ -318,102 +518,85 @@ export default function DashboardPage() {
   const [token, setToken] = useState<string | null>(null)
   const [tab, setTab]     = useState<Tab>('library')
 
-  // Handle token from URL after Steam OAuth callback
   useEffect(() => {
+    // Handle token from Steam callback
     const urlToken = searchParams.get('token')
     if (urlToken) {
       localStorage.setItem('steamsense_token', urlToken)
       router.replace('/dashboard')
-      return
     }
+
     const t = getToken()
+    const u = getUserFromStorage()
     setToken(t)
-    setUser(getUserFromStorage())
-    const tabParam = searchParams.get('tab') as Tab
-    if (tabParam) setTab(tabParam)
+    setUser(u)
+
+    // Tab from URL
+    const tabParam = searchParams.get('tab') as Tab | null
+    if (tabParam && ['library', 'wishlist', 'recs'].includes(tabParam)) {
+      setTab(tabParam)
+    }
   }, [searchParams, router])
 
-  if (!user || !token) {
-    return (
-      <div className="min-h-screen bg-steam-bg">
-        <Navbar />
-        <div className="flex items-center justify-center min-h-screen px-6">
-          <div className="text-center space-y-6 max-w-sm">
-            <div className="w-20 h-20 mx-auto rounded-2xl bg-steam-card border border-steam-border flex items-center justify-center">
-              <Gamepad2 size={36} className="text-steam-cyan" />
-            </div>
-            <div>
-              <h1 className="font-display font-bold text-2xl text-steam-text">Sign in to access your dashboard</h1>
-              <p className="text-steam-subtle mt-2 text-sm">Connect your Steam account to see your library, wishlist, and personalized recommendations.</p>
-            </div>
-            <a href={`http://localhost:8000/auth/steam`}
-              className="inline-flex items-center gap-3 px-6 py-3 bg-[#1b2838] border border-[#2a475e] rounded-xl text-white font-semibold hover:bg-[#2a475e] transition-colors">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0z"/>
-              </svg>
-              Sign in with Steam
-            </a>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const tabs = [
+  const tabs: { key: Tab; label: string; icon: any }[] = [
     { key: 'library',  label: 'Library',         icon: Library  },
     { key: 'wishlist', label: 'Wishlist',         icon: Heart    },
     { key: 'recs',     label: 'Recommendations',  icon: Sparkles },
-  ] as const
+  ]
 
   return (
     <div className="min-h-screen bg-steam-bg">
       <Navbar />
-      <div className="max-w-5xl mx-auto px-6 pt-24 pb-20">
+      <div className="max-w-4xl mx-auto px-6 pt-24 pb-20">
 
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8 animate-slide-up">
-          {user.avatar_url && (
-            <Image src={user.avatar_url} alt={user.display_name} width={56} height={56}
-              className="rounded-xl border-2 border-steam-cyan/20" unoptimized />
+        <div className="mb-8">
+          {user && (
+            <div className="flex items-center gap-4 mb-6">
+              {user.avatar_url && (
+                <Image src={user.avatar_url} alt={user.display_name}
+                  width={48} height={48} className="rounded-full" unoptimized />
+              )}
+              <div>
+                <h1 className="font-display font-bold text-2xl text-steam-text">{user.display_name}</h1>
+                <p className="text-steam-subtle text-xs font-mono">Steam ID: {user.steam_id}</p>
+              </div>
+            </div>
           )}
-          <div>
-            <p className="text-steam-subtle text-xs font-mono mb-1">Dashboard</p>
-            <h1 className="font-display font-bold text-2xl text-steam-text">{user.display_name}</h1>
+
+          {/* Tabs */}
+          <div className="flex gap-2 flex-wrap">
+            {tabs.map(({ key, label, icon: Icon }) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-mono transition-all ${
+                  tab === key
+                    ? 'bg-steam-cyan/10 border border-steam-cyan/30 text-steam-cyan'
+                    : 'glass text-steam-subtle hover:text-steam-text'
+                }`}>
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-8">
-          {tabs.map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setTab(key as Tab)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-mono transition-all ${
-                tab === key
-                  ? 'bg-steam-cyan/10 border border-steam-cyan/30 text-steam-cyan'
-                  : 'glass text-steam-subtle hover:text-steam-text'
-              }`}>
-              <Icon size={14} /> {label}
-            </button>
-          ))}
-        </div>
-
         {/* Content */}
-        <div className="animate-fade-in">
-          {tab === 'library'  && <LibraryTab  token={token} />}
-          {tab === 'wishlist' && <WishlistTab token={token} />}
-          {tab === 'recs'     && <RecsTab     token={token} />}
-        </div>
+        {!token ? (
+          <div className="text-center py-20 space-y-4">
+            <p className="text-steam-subtle">Please sign in with Steam to view your dashboard.</p>
+            <a href={`${BASE}/auth/steam`}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-steam-cyan/10 border border-steam-cyan/20 text-steam-cyan rounded-xl text-sm font-mono hover:bg-steam-cyan/20 transition-all">
+              Sign in with Steam
+            </a>
+          </div>
+        ) : (
+          <>
+            {tab === 'library'  && <LibraryTab  token={token} />}
+            {tab === 'wishlist' && <WishlistTab token={token} />}
+            {tab === 'recs'     && <RecsTab     token={token} />}
+          </>
+        )}
       </div>
     </div>
-  )
-}
-
-function Gamepad2({ size, className }: { size: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <line x1="6" y1="12" x2="10" y2="12" /><line x1="8" y1="10" x2="8" y2="14" />
-      <line x1="15" y1="13" x2="15.01" y2="13" /><line x1="18" y1="11" x2="18.01" y2="11" />
-      <rect x="2" y="6" width="20" height="12" rx="2" />
-    </svg>
   )
 }

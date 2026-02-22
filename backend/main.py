@@ -25,8 +25,8 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     logger.info("Iniciando SteamSense API...")
 
-    init_db()
-    con = get_db()
+    init_db()           # solo configura _db_path, no abre conexión
+    con = get_db()      # abre la conexión del main thread
     create_all_tables(con)
     create_user_tables(con)
     logger.info("DuckDB listo")
